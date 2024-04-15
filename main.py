@@ -22,7 +22,7 @@ def get_logger():
 
     # Get the logger and use it as before
     logger = logging.getLogger(__name__)
-    logger.debug('This is a debug message from dictionary')
+    logger.info('Logger initiated')
     return logger
 
 
@@ -96,8 +96,7 @@ def get_orientation_data(image: nib.imageclasses, thickness: int, overlap: int, 
     orientation_data["pad_with_dim"] = pad_with_dim
     orientation_data["num_slabs"] = num_slabs
     orientation_data["pad_size"] = pad_size
-    
-    logging.info(f"orientation_data looks like:\n{orientation_data}")
+
     return orientation_data
 
 
@@ -143,11 +142,14 @@ def perform_axial_projection(image_directory: str, thickness: int, overlap: int,
 
     # get necessary info 
     
+    logger.info(f"Get essential meta data for calculation")
     orientation_data = get_orientation_data(
         image=image,
         thickness=thickness,
         overlap=overlap,
         orientation=orientation)
+    
+    logger.info(f"Got meta data: \n {orientation_data}")
     
     orientation_index = orientation_data.get("orientation_index")
     step_size = orientation_data.get("step_size")
@@ -160,6 +162,7 @@ def perform_axial_projection(image_directory: str, thickness: int, overlap: int,
     # create a zero image
     projected_image_shape = orientation_data.get("projected_image_shape")
     projected_image = np.zeros(projected_image_shape)
+    logger.info(f"Created Zero image with shape: {projected_image_shape}")
     
     images_3d_array = image.get_fdata()
 
@@ -169,6 +172,7 @@ def perform_axial_projection(image_directory: str, thickness: int, overlap: int,
         pad_width=orientation_data['pad_with_dim'],
         mode='symmetric')
     
+    logger.info(f"Starting calculating {projection_type}...")
     # Iterate through each slab to get projection image
     for i in range(num_slabs):
         # Calculate start and end index for the current slab (in voxels)
@@ -177,7 +181,6 @@ def perform_axial_projection(image_directory: str, thickness: int, overlap: int,
 
         # TODO: migh over calculate the slab, the process shall stop when reach the last slice of the array
         # Select data for the current slab (considering potential array edge)
-        logger.info(f"Calculating projection along {orientation_index} index")
         logger.info(f"The rannge of slab data from {start_index} to {end_index}")
         if orientation_index == 0:
             slab_data = images_3d_array[start_index:end_index, :, :]
@@ -188,8 +191,6 @@ def perform_axial_projection(image_directory: str, thickness: int, overlap: int,
 
         # Take the maximum value within the axial slab
         mip_slice = projection_func(slab_data, axis=orientation_index)
-        logger.info(f"Projection along axis {orientation_index} completed")
-        
         
         if orientation_index == 0:
             projected_image[i, :, :] = mip_slice
@@ -199,7 +200,7 @@ def perform_axial_projection(image_directory: str, thickness: int, overlap: int,
             projected_image[:, :, i] = mip_slice
         logger.info(f"Replace {i}-th slab completed")
     
-    
+    logger.info(f"Finished {projection_type} image calculation")
     projected_image = nib.Nifti1Image(projected_image, affine=image_affine)
     
     return projected_image
