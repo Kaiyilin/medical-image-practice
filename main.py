@@ -63,13 +63,13 @@ def get_orientation_data(image: nib.imageclasses, thickness: int, overlap: int, 
     voxel_size = image.header.get_zooms()[orientation_index]
     
     step_size = thickness - overlap
-    pad_size = round(thickness / voxel_size) # 
+    delta_thickness = round(thickness / voxel_size) # 
     
     slice_number = image_shape[orientation_index]
     num_slabs = int((slice_number * voxel_size) // step_size) # ensure it's integers
     
     image_affine = image.affine
-    new_spacing = slice_number * voxel_size / num_slabs
+    new_spacing = slice_number * image_affine[orientation_index, orientation_index] / num_slabs
     image_affine[orientation_index, orientation_index] = new_spacing
     
     # create a zero image
@@ -87,7 +87,7 @@ def get_orientation_data(image: nib.imageclasses, thickness: int, overlap: int, 
     orientation_data["image_affine"] = image_affine
     orientation_data["projected_image_shape"] = projected_image_shape
     orientation_data["num_slabs"] = num_slabs
-    orientation_data["pad_size"] = pad_size
+    orientation_data["delta_thickness"] = delta_thickness
 
     return orientation_data
 
@@ -157,7 +157,7 @@ def perform_projection(image_directory: str, thickness: int, overlap: int, proje
     for i in range(orientation_data.get("num_slabs")):
         # Calculate start and end index for the current slab (in voxels)
         start_index = round(i * orientation_data.get("step_size") / orientation_data.get("voxel_size"))
-        end_index = min(start_index + orientation_data.get("pad_size"),  orientation_data.get("slice_number"))
+        end_index = min(start_index + orientation_data.get("delta_thickness"),  orientation_data.get("slice_number"))
 
         # Select data for the current slab (considering potential array edge)
         logger.info(f"The rannge of slab data from {start_index} to {end_index}")
