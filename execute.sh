@@ -1,9 +1,14 @@
 dicom_files_dir='/Users/kaiyilin/Documents/code_project/medical-image-practice/Input/3D_AXIAL_SWI_0.nii.gz'
-thickness=10
-overlap=5
+thickness=5
+overlap=3
 projection_type='MaxIP'
-orientation='sagittal'
+orientations=(
+    'axial'
+    'coronal'
+    'sagittal'
+    )
 
 
-# pyvenvact
-python main.py --image_path $dicom_files_dir --thickness $thickness --overlap $overlap --projection $projection_type --orientation $orientation
+for orientation in "${orientations[@]}"; do
+    python main.py --image_path $dicom_files_dir --thickness $thickness --overlap $overlap --projection $projection_type --orientation $orientation
+done

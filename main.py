@@ -5,15 +5,16 @@ from datetime import datetime
 import logging.config
 import json
 
-# TODO: convert to 3D,
 # TODO: use poetry to handle the package 
-
-# TODO: add logger
-# TODO: fix pixel spacing (https://simpleitk.readthedocs.io/en/v1.2.4/Documentation/docs/source/fundamentalConcepts.html) and data type issue
-
-
+# TODO: fix data type inconsistent
+# TODO fix coronal orientation issue 
 
 def get_logger():
+    """_summary_
+
+    Returns:
+        _type_: _description_
+    """
     
     with open('./config/log_config.json') as f:
         config = json.load(f)
@@ -26,7 +27,7 @@ def get_logger():
     return logger
 
 
-def is_nifti_file(filename):
+def is_nifti_file(filename) -> bool:
     """
     Check if the given filename ends with '.nii' or '.nii.gz'
 
@@ -61,46 +62,37 @@ def get_orientation_data(image: nib.imageclasses, thickness: int, overlap: int, 
     image_shape = image.header.get_data_shape()
     voxel_size = image.header.get_zooms()[orientation_index]
     
-    logging.info(f"Original image shape: {image_shape}")
-    
     step_size = thickness - overlap
     pad_size = round(thickness / voxel_size) # 
     
     slice_number = image_shape[orientation_index]
-    num_slabs = int(np.ceil((slice_number * voxel_size) / step_size))
+    num_slabs = int((slice_number * voxel_size) // step_size) # ensure it's integers
     
     image_affine = image.affine
     new_spacing = slice_number * voxel_size / num_slabs
     image_affine[orientation_index, orientation_index] = new_spacing
     
-    
     # create a zero image
     if orientation_index == 0:
         projected_image_shape = (num_slabs, image_shape[1], image_shape[2])
-        pad_with_dim = ((0, pad_size), (0, 0), (0, 0))
-    
     elif orientation_index == 1:
         projected_image_shape = (image_shape[0], num_slabs, image_shape[2])
-        pad_with_dim = ((0, 0), (0, pad_size), (0, 0))
     else:
         projected_image_shape = (image_shape[0], image_shape[1], num_slabs)
-        pad_with_dim = ((0, 0), (0, 0), (0, pad_size))
         
-    
     orientation_data["orientation_index"] = orientation_index
     orientation_data["voxel_size"] = voxel_size
     orientation_data["step_size"] = step_size
     orientation_data["slice_number"] = slice_number
     orientation_data["image_affine"] = image_affine
     orientation_data["projected_image_shape"] = projected_image_shape
-    orientation_data["pad_with_dim"] = pad_with_dim
     orientation_data["num_slabs"] = num_slabs
     orientation_data["pad_size"] = pad_size
 
     return orientation_data
 
 
-def perform_axial_projection(image_directory: str, thickness: int, overlap: int, projection_type: str, orientation: str):
+def perform_projection(image_directory: str, thickness: int, overlap: int, projection_type: str, orientation: str) -> nib.Nifti1Image:
     """_summary_
 
     Args:
@@ -118,7 +110,7 @@ def perform_axial_projection(image_directory: str, thickness: int, overlap: int,
     
     # sanitise the input first, use choice in arg
     if  not is_nifti_file(image_directory):
-        raise ValueError("Invalid image directory, please ubderstand this function support nii only")
+        raise ValueError("Invalid image directory, please understand this function support nii only")
     
     if not isinstance(thickness, int):
         thickness = int(thickness)
@@ -127,7 +119,7 @@ def perform_axial_projection(image_directory: str, thickness: int, overlap: int,
         overlap = int(overlap)
       
     logger = get_logger()
-    logger.info(f"Starting execute {projection_type} algorithm")
+    logger.info(f"Starting execute {projection_type} algorithm in {orientation} view")
 
     # get the projection function
     projection_mapping = {
@@ -142,7 +134,7 @@ def perform_axial_projection(image_directory: str, thickness: int, overlap: int,
 
     # get necessary info 
     
-    logger.info(f"Get essential meta data for calculation")
+    logger.info(f"Getting essential meta data for calculation...")
     orientation_data = get_orientation_data(
         image=image,
         thickness=thickness,
@@ -152,12 +144,6 @@ def perform_axial_projection(image_directory: str, thickness: int, overlap: int,
     logger.info(f"Got meta data: \n {orientation_data}")
     
     orientation_index = orientation_data.get("orientation_index")
-    step_size = orientation_data.get("step_size")
-    voxel_size = orientation_data.get("voxel_size")
-    image_affine = orientation_data.get("image_affine")
-    pad_size = orientation_data.get("pad_size")
-    num_slabs = orientation_data.get("num_slabs")
-    slice_number = orientation_data.get("slice_number")
     
     # create a zero image
     projected_image_shape = orientation_data.get("projected_image_shape")
@@ -165,21 +151,14 @@ def perform_axial_projection(image_directory: str, thickness: int, overlap: int,
     logger.info(f"Created Zero image with shape: {projected_image_shape}")
     
     images_3d_array = image.get_fdata()
-
-    # pad for further calculation
-    images_3d_array = np.pad(
-        images_3d_array,
-        pad_width=orientation_data['pad_with_dim'],
-        mode='symmetric')
     
     logger.info(f"Starting calculating {projection_type}...")
     # Iterate through each slab to get projection image
-    for i in range(num_slabs):
+    for i in range(orientation_data.get("num_slabs")):
         # Calculate start and end index for the current slab (in voxels)
-        start_index = round(i * step_size / voxel_size)
-        end_index = min(start_index + pad_size, slice_number)
+        start_index = round(i * orientation_data.get("step_size") / orientation_data.get("voxel_size"))
+        end_index = min(start_index + orientation_data.get("pad_size"),  orientation_data.get("slice_number"))
 
-        # TODO: migh over calculate the slab, the process shall stop when reach the last slice of the array
         # Select data for the current slab (considering potential array edge)
         logger.info(f"The rannge of slab data from {start_index} to {end_index}")
         if orientation_index == 0:
@@ -200,8 +179,8 @@ def perform_axial_projection(image_directory: str, thickness: int, overlap: int,
             projected_image[:, :, i] = mip_slice
         logger.info(f"Replace {i}-th slab completed")
     
-    logger.info(f"Finished {projection_type} image calculation")
-    projected_image = nib.Nifti1Image(projected_image, affine=image_affine)
+    logger.info(f"Finished {projection_type} image calculation\n")
+    projected_image = nib.Nifti1Image(projected_image, affine=orientation_data.get("image_affine"))
     
     return projected_image
 
@@ -222,7 +201,7 @@ def main():
     overlap = args["overlap"]
     orientation = args["orientation"]
     
-    projected_images = perform_axial_projection(
+    projected_images = perform_projection(
         image_directory=image_path,
         thickness=thickness, 
         overlap=overlap,

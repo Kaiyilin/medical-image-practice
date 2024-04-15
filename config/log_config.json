@@ -8,7 +8,7 @@
     "handlers": {
         "file_handler": {
             "class": "logging.FileHandler",
-            "filename": "./logs/med_imaging_practice.log",
+            "filename": "./med_imaging_practice.log",
             "formatter": "simple"
         }
     },
