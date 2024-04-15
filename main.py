@@ -72,7 +72,11 @@ def get_essential_data(image: nib.imageclasses, thickness: int, overlap: int, or
     new_spacing = slice_number * image_affine[orientation_index, orientation_index] / num_slabs
     image_affine[orientation_index, orientation_index] = new_spacing
     
-    # create a zero image
+    # projected_image_shape = list(image_shape)
+    # projected_image_shape[orientation_index] = num_slabs
+    # projected_image_shape = tuple(projected_image_shape)
+    
+    # create a zero image. faster
     if orientation_index == 0:
         projected_image_shape = (num_slabs, image_shape[1], image_shape[2])
     elif orientation_index == 1:
@@ -140,7 +144,7 @@ def perform_projection(image_directory: str, thickness: int, overlap: int, proje
         overlap=overlap,
         orientation=orientation)
     
-    logger.info(f"Got meta data: \n {essential_data}")
+    logger.info(f"Got essential meta data: \n {essential_data}")
     
     orientation_index = essential_data.get("orientation_index")
     
