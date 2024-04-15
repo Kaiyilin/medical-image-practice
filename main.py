@@ -7,7 +7,6 @@ import json
 
 # TODO: use poetry to handle the package 
 # TODO: fix data type inconsistent
-# TODO fix coronal orientation issue 
 
 def get_logger():
     """_summary_
@@ -26,6 +25,7 @@ def get_logger():
     logger.info('Logger initiated')
     return logger
 
+logger = get_logger()
 
 def is_nifti_file(filename) -> bool:
     """
@@ -37,7 +37,7 @@ def is_nifti_file(filename) -> bool:
     return filename.endswith('.nii') or filename.endswith('.nii.gz')
 
 
-def get_orientation_data(image: nib.imageclasses, thickness: int, overlap: int, orientation: str) -> dict:
+def get_essential_data(image: nib.imageclasses, thickness: int, overlap: int, orientation: str) -> dict:
     """_summary_
 
     Args:
@@ -53,7 +53,7 @@ def get_orientation_data(image: nib.imageclasses, thickness: int, overlap: int, 
         "axial" : 2,
     }
     
-    orientation_data = {}
+    essential_data = {}
     
     
     orientation_index = orientation_index_mapping.get(orientation)
@@ -80,16 +80,16 @@ def get_orientation_data(image: nib.imageclasses, thickness: int, overlap: int, 
     else:
         projected_image_shape = (image_shape[0], image_shape[1], num_slabs)
         
-    orientation_data["orientation_index"] = orientation_index
-    orientation_data["voxel_size"] = voxel_size
-    orientation_data["step_size"] = step_size
-    orientation_data["slice_number"] = slice_number
-    orientation_data["image_affine"] = image_affine
-    orientation_data["projected_image_shape"] = projected_image_shape
-    orientation_data["num_slabs"] = num_slabs
-    orientation_data["delta_thickness"] = delta_thickness
+    essential_data["orientation_index"] = orientation_index
+    essential_data["voxel_size"] = voxel_size
+    essential_data["step_size"] = step_size
+    essential_data["slice_number"] = slice_number
+    essential_data["image_affine"] = image_affine
+    essential_data["projected_image_shape"] = projected_image_shape
+    essential_data["num_slabs"] = num_slabs
+    essential_data["delta_thickness"] = delta_thickness
 
-    return orientation_data
+    return essential_data
 
 
 def perform_projection(image_directory: str, thickness: int, overlap: int, projection_type: str, orientation: str) -> nib.Nifti1Image:
@@ -117,8 +117,7 @@ def perform_projection(image_directory: str, thickness: int, overlap: int, proje
     
     if not isinstance(overlap, int):
         overlap = int(overlap)
-      
-    logger = get_logger()
+    
     logger.info(f"Starting execute {projection_type} algorithm in {orientation} view")
 
     # get the projection function
@@ -135,18 +134,18 @@ def perform_projection(image_directory: str, thickness: int, overlap: int, proje
     # get necessary info 
     
     logger.info(f"Getting essential meta data for calculation...")
-    orientation_data = get_orientation_data(
+    essential_data = get_essential_data(
         image=image,
         thickness=thickness,
         overlap=overlap,
         orientation=orientation)
     
-    logger.info(f"Got meta data: \n {orientation_data}")
+    logger.info(f"Got meta data: \n {essential_data}")
     
-    orientation_index = orientation_data.get("orientation_index")
+    orientation_index = essential_data.get("orientation_index")
     
     # create a zero image
-    projected_image_shape = orientation_data.get("projected_image_shape")
+    projected_image_shape = essential_data.get("projected_image_shape")
     projected_image = np.zeros(projected_image_shape)
     logger.info(f"Created Zero image with shape: {projected_image_shape}")
     
@@ -154,13 +153,13 @@ def perform_projection(image_directory: str, thickness: int, overlap: int, proje
     
     logger.info(f"Starting calculating {projection_type}...")
     # Iterate through each slab to get projection image
-    for i in range(orientation_data.get("num_slabs")):
+    for i in range(essential_data.get("num_slabs")):
         # Calculate start and end index for the current slab (in voxels)
-        start_index = round(i * orientation_data.get("step_size") / orientation_data.get("voxel_size"))
-        end_index = min(start_index + orientation_data.get("delta_thickness"),  orientation_data.get("slice_number"))
+        start_index = round(i * essential_data.get("step_size") / essential_data.get("voxel_size"))
+        end_index = min(start_index + essential_data.get("delta_thickness"),  essential_data.get("slice_number"))
 
         # Select data for the current slab (considering potential array edge)
-        logger.info(f"The rannge of slab data from {start_index} to {end_index}")
+        logger.info(f"Get the slab data from the slice {start_index} to {end_index} of the original data")
         if orientation_index == 0:
             slab_data = images_3d_array[start_index:end_index, :, :]
         elif orientation_index == 1:
@@ -170,17 +169,19 @@ def perform_projection(image_directory: str, thickness: int, overlap: int, proje
 
         # Take the maximum value within the axial slab
         mip_slice = projection_func(slab_data, axis=orientation_index)
+        logger.info(f"Projection completed")
         
+        logger.info(f"Starting replace {i}-th zero image...")
         if orientation_index == 0:
             projected_image[i, :, :] = mip_slice
         elif orientation_index == 1:
             projected_image[:, i, :] = mip_slice
         else:
             projected_image[:, :, i] = mip_slice
-        logger.info(f"Replace {i}-th slab completed")
+        logger.info(f"Replaced {i}-th zero image")
     
-    logger.info(f"Finished {projection_type} image calculation\n")
-    projected_image = nib.Nifti1Image(projected_image, affine=orientation_data.get("image_affine"))
+    logger.info(f"Finished {projection_type} image calculation on {orientation} view")
+    projected_image = nib.Nifti1Image(projected_image, affine=essential_data.get("image_affine"))
     
     return projected_image
 
@@ -210,7 +211,7 @@ def main():
         )
     
     projected_images.to_filename(f"./{projection_type}_thickness_{thickness}_overlap_{overlap}_{orientation}.nii")
-    
+    logger.info(f"projection image saved to ./{projection_type}_thickness_{thickness}_overlap_{overlap}_{orientation}.nii\n")
 
 if __name__ == "__main__":
     main()
