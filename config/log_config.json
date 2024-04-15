@@ -1,0 +1,21 @@
+{
+    "version": 1,
+    "formatters": {
+        "simple": {
+            "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        }
+    },
+    "handlers": {
+        "file_handler": {
+            "class": "logging.FileHandler",
+            "filename": "./logs/med_imaging_practice.log",
+            "formatter": "simple"
+        }
+    },
+    "loggers": {
+        "": {
+            "handlers": ["file_handler"],
+            "level": "DEBUG"
+        }
+    }
+}
